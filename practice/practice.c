@@ -6,7 +6,8 @@
 
 enum command_type {
     PAINT_LINE,
-    PAINT_SQUARE
+    PAINT_SQUARE,
+    ERASE
 };
 
 // We only generate PAINT_LINEs so...
@@ -24,6 +25,10 @@ struct command {
             size_t y;
             size_t s;
         } square;
+        struct {
+            size_t x;
+            size_t y;
+        } erase;
     } data;
     struct command* next;
 };
@@ -129,7 +134,10 @@ size_t square_half_side_len(uint8_t* grid,
                             uint8_t* already_painted,
                             size_t w, size_t h,
                             size_t x, size_t y,
-                            size_t* wasted) {
+                            size_t* wasted,
+                            bool* have_to_delete,
+                            size_t* to_delete_x,
+                            size_t* to_delete_y) {
     // TODO: This function could just use min(line_to_right, line_to_bottom)
     // and check the inner part of the square then.
     assert(x < w);
@@ -137,7 +145,10 @@ size_t square_half_side_len(uint8_t* grid,
     assert(grid[y * w + x]);
     assert(!already_painted[y * w + x]);
 
+    *have_to_delete = false;
     size_t best_side = 0;
+    size_t best_side_without_deleting = 0;
+    size_t best_wasted_without_deleting = 0;
     size_t best_wasted = 0;
     // We start looking from size one, to the biggest possible square, and fall
     // back to size 0 if even one is too bad.
@@ -145,6 +156,8 @@ size_t square_half_side_len(uint8_t* grid,
     while (true) {
         size_t dim = 2 * side + 1;
         size_t current_wasted = 0;
+        bool have_to_delete_this_round = false;
+        size_t to_delete_y_this_round, to_delete_x_this_round;
 
         // The best square we've got is the best we can do without going off
         // the figure.
@@ -153,8 +166,17 @@ size_t square_half_side_len(uint8_t* grid,
 
         for (size_t i = 0; i < dim; ++i) {
             for (size_t j = 0; j < dim; ++j) {
-                if (!grid[(y + j) * w + x + i])
-                    goto end; // Here be dragons
+                if (!grid[(y + j) * w + x + i]) {
+                    if (*have_to_delete && x + i != *to_delete_x && y + j != *to_delete_y)
+                        goto end; // No more than 1 delete per square
+                    if (have_to_delete_this_round)
+                        goto end; // Same
+                    have_to_delete_this_round = true;
+                    to_delete_x_this_round = x + i;
+                    to_delete_y_this_round = y + j;
+                    current_wasted++;
+                    continue;
+                }
 
                 if (already_painted[(y + j) * w + x + i])
                     current_wasted++;
@@ -165,6 +187,16 @@ size_t square_half_side_len(uint8_t* grid,
         // than the previous.
         size_t best_dim = 2 * best_side + 1;
         if (dim * dim - current_wasted > best_dim * best_dim - best_wasted) {
+            if (have_to_delete_this_round) {
+                if (!*have_to_delete) {
+                    *have_to_delete = true;
+                    best_side_without_deleting = best_side;
+                    best_wasted_without_deleting = best_wasted;
+                }
+                *to_delete_x = to_delete_x_this_round;
+                *to_delete_y = to_delete_y_this_round;
+            }
+
             best_side = side;
             best_wasted = current_wasted;
         }
@@ -172,6 +204,13 @@ size_t square_half_side_len(uint8_t* grid,
     }
 
 end:
+    // We don't consider worthy to delete if the side is less or equal than
+    // three.
+    if (*have_to_delete && side <= 3) {
+        *have_to_delete = false;
+        best_wasted = best_wasted_without_deleting;
+        best_side = best_side_without_deleting;
+    }
     *wasted = best_wasted;
     return best_side;
 }
@@ -236,9 +275,12 @@ int main(int argc, char** argv) {
                 continue;
             struct command command;
             size_t r_wasted, b_wasted, square_wasted;
+            size_t to_delete_x, to_delete_y;
+            bool have_to_delete;
+
             size_t rlen = line_to_right_len(painting, grid, width, height, i, j, &r_wasted);
             size_t blen = line_to_bottom_len(painting, grid, width, height, i, j, &b_wasted);
-            size_t square_half_side = square_half_side_len(painting, grid, width, height, i, j, &square_wasted);
+            size_t square_half_side = square_half_side_len(painting, grid, width, height, i, j, &square_wasted, &have_to_delete, &to_delete_x, &to_delete_y);
             size_t square_dim = 2 * square_half_side + 1;
             size_t square_filled = square_dim * square_dim;
 
@@ -246,23 +288,26 @@ int main(int argc, char** argv) {
             assert(rlen);
             assert(blen);
 
-            fprintf(stderr, "(%zu, %zu): rline(%zu - %zu), bline(%zu - %zu), square(%zu - %zu)\n", i, j,
+            fprintf(stderr, "(%zu, %zu): rline(%zu - %zu), bline(%zu - %zu), square(%zu - %zu, %s)\n", i, j,
                                                                                                    rlen, r_wasted,
                                                                                                    blen, b_wasted,
-                                                                                                   square_filled, square_wasted);
+                                                                                                   square_filled, square_wasted,
+                                                                                                   have_to_delete ? "true" : "false");
 
             // There must always be a benefit
             assert(rlen > r_wasted);
             assert(blen > b_wasted);
-            assert(square_filled > square_wasted);
+            assert(square_filled >= square_wasted);
 
             // We just do the best we can do right now, we don't look ahead
-            if (rlen - r_wasted > blen - b_wasted && rlen - r_wasted > square_filled - square_wasted) {
+            if (rlen - r_wasted > blen - b_wasted &&
+                rlen - r_wasted > square_filled - square_wasted) {
                 command.type = PAINT_LINE;
                 command.data.line.x1 = i;
                 command.data.line.y1 = j;
                 command.data.line.x2 = i + rlen - 1;
                 command.data.line.y2 = j;
+                command_list_add(&list, &command);
 
                 while (rlen--) {
                     assert(PAINTING(i + rlen, j));
@@ -274,6 +319,7 @@ int main(int argc, char** argv) {
                 command.data.line.y1 = j;
                 command.data.line.x2 = i;
                 command.data.line.y2 = j + blen -1;
+                command_list_add(&list, &command);
 
                 while (blen--) {
                     assert(PAINTING(i, j + blen));
@@ -284,16 +330,25 @@ int main(int argc, char** argv) {
                 command.data.square.s = square_half_side;
                 command.data.square.x = i + square_half_side;
                 command.data.square.y = j + square_half_side;
+                command_list_add(&list, &command);
+
                 size_t dim = 2 * square_half_side + 1;
                 for (size_t ii = 0; ii < dim; ++ii) {
                     for (size_t jj = 0; jj < dim; ++jj) {
-                        assert(PAINTING(i + ii, j + jj));
+                        assert(PAINTING(i + ii, j + jj) ||
+                               (have_to_delete && i + ii == to_delete_x && j + jj == to_delete_y));
                         GRID(i + ii, j + jj) = 1;
                     }
                 }
-            }
 
-            command_list_add(&list, &command);
+                if (have_to_delete) {
+                    command.type = ERASE;
+                    command.data.erase.x = to_delete_x;
+                    command.data.erase.y = to_delete_y;
+                    command_list_add(&list, &command);
+                    GRID(to_delete_x, to_delete_y) = 0;
+                }
+            }
         }
     }
 
@@ -326,6 +381,11 @@ int main(int argc, char** argv) {
                 printf("PAINT_SQUARE %zu %zu %zu\n", current->data.square.y,
                                                      current->data.square.x,
                                                      current->data.square.s);
+                break;
+            case ERASE:
+                assert(current->data.erase.x < width);
+                assert(current->data.erase.y < height);
+                printf("ERASE_CELL %zu %zu\n", current->data.erase.y, current->data.erase.x);
                 break;
             default:
                 assert(0 && "Invalid type");
