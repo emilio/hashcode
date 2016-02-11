@@ -8,10 +8,9 @@
 #include <cassert>
 #include <cmath>
 
-typedef size_t OrderId;
-typedef size_t DroneId;
-typedef size_t ProductId;
-typedef size_t WarehouseId;
+#include "Commands.h"
+// Yes, I know this is awfully bad, but...
+#include "Commands.cpp"
 
 const size_t INVALID_ID = (size_t) -1;
 

@@ -4,47 +4,52 @@
 #include <iostream>
 #include <string>
 
-using namespace std;
-
-class Commands{
+class Command {
+    size_t extra_duration() { return 0; }
 };
 
-class Load:Commands{
+class LoadCommand : public Command {
+public:
+    size_t DroneId droneId;
+	size_t count;
+
+	LoadCommand(size_t droneId, size_t warehouseId, size_t productType, size_t count);
+
+    size_t extra_duration() { return 1; }
+};
+
+class UnloadCommand: public Command {
 	public:
-	int droneId;
-	int warehouseId;
-	int productType;
-	int count;
-	Load(int droneId, int warehouseId, int productType, int count);
+	size_t droneId;
+	size_t warehouseId;
+	size_t productType;
+	size_t count;
+	UnloadCommand(size_t droneId, size_t warehouseId, size_t productType, size_t count);
+
+    size_t extra_duration() { return 1; }
 };
 
-class Unload:Commands{
+class DeliverCommand: public Command {
 	public:
-	int droneId;
-	int warehouseId;
-	int productType;
-	int count;
-	Unload(int droneId, int warehouseId, int productType, int count);
+	size_t droneId;
+	size_t orderId;
+	size_t productType;
+	size_t count;
+
+	DeliverCommand(size_t droneId, size_t orderId, size_t productType, size_t count);
+
+    size_t extra_duration() { return 1; }
 };
 
-class Deliver:Commands{
+class WaitCommand: public Command {
 	public:
-	int droneId;
-	int orderId;
-	int productType;
-	int count;
-	Deliver(int droneId, int orderId, int productType, int count);
+	size_t droneId;
+	size_t sleepTurns;
+	WaitCommand(size_t droneId, size_t sleepTurns);
 };
 
-class Wait:Commands{
-	public:
-	int droneId;
-	int sleepTurns;	
-	Wait(int droneId, int sleepTurns);
-};
-
-std::ostream& operator<<(std::ostream& out, const Load& load);
-std::ostream& operator<<(std::ostream& out, const Unload& unload);
-std::ostream& operator<<(std::ostream& out, const Deliver& deliver);
-std::ostream& operator<<(std::ostream& out, const Wait& wait);
+std::ostream& operator<<(std::ostream& out, const LoadCommand& load);
+std::ostream& operator<<(std::ostream& out, const UnloadCommand& unload);
+std::ostream& operator<<(std::ostream& out, const DeliverCommand& deliver);
+std::ostream& operator<<(std::ostream& out, const WaitCommand& wait);
 #endif COMMANDS_H
