@@ -1,15 +1,15 @@
 #include "commands.h"
 
-LoadCommand::LoadCommand(int droneId, int warehouseId, int productType, int count) : droneId(droneId), warehouseId(warehouseId), productType(productType), count(count) {
+LoadCommand::LoadCommand(size_t droneId, size_t warehouseId, size_t productType, size_t count) : droneId(droneId), warehouseId(warehouseId), productType(productType), count(count) {
 }
 
-UnloadCommand::UnloadCommand(int droneId, int warehouseId, int productType, int count) : droneId(droneId), warehouseId(warehouseId), productType(productType), count(count) {
+UnloadCommand::UnloadCommand(size_t droneId, size_t warehouseId, size_t productType, size_t count) : droneId(droneId), warehouseId(warehouseId), productType(productType), count(count) {
 }
 
-DeliverCommand::DeliverCommand(int droneId, int orderId, int productType, int count) : droneId(droneId), orderId(orderId), productType(productType), count(count) {
+DeliverCommand::DeliverCommand(size_t droneId, size_t orderId, size_t productType, size_t count) : droneId(droneId), orderId(orderId), productType(productType), count(count) {
 }
 
-WaitCommand::WaitCommand(int droneId, int sleepTurns) : droneId(droneId), sleepTurns(sleepTurns){
+WaitCommand::WaitCommand(size_t droneId, size_t sleepTurns) : droneId(droneId), sleepTurns(sleepTurns){
 
 }
 

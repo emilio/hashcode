@@ -10,8 +10,10 @@ class Command {
 
 class LoadCommand : public Command {
 public:
-    size_t DroneId droneId;
-	size_t count;
+    size_t droneId;
+    size_t warehouseId;
+	size_t productType;
+    size_t count;
 
 	LoadCommand(size_t droneId, size_t warehouseId, size_t productType, size_t count);
 
@@ -52,4 +54,5 @@ std::ostream& operator<<(std::ostream& out, const LoadCommand& load);
 std::ostream& operator<<(std::ostream& out, const UnloadCommand& unload);
 std::ostream& operator<<(std::ostream& out, const DeliverCommand& deliver);
 std::ostream& operator<<(std::ostream& out, const WaitCommand& wait);
-#endif COMMANDS_H
+
+#endif
