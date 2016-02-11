@@ -97,6 +97,16 @@ public:
         }
         return INVALID;
     }
+
+    void mark_as_delivered(ProductId id) {
+        size_t size = m_delivered.size();
+        for (size_t i = 0; i < size; ++i) {
+            if (m_products[i] == id && !m_delivered[i]) {
+                m_delivered[i] = true;
+                break; // Only mark as delivered the first undelivered product
+            }
+        }
+    }
 };
 
 class Drone {
@@ -157,7 +167,7 @@ public:
                 id = warehouse.id;
             }
         }
-        assert(id < m_warehouses.size());
+        assert(id != INVALID);
         return m_warehouses[id];
     }
 };
@@ -290,6 +300,8 @@ int main(int argc, char** argv) {
 
     Simulation simulation(in);
 
+    std::vector<Command> commands;
+
     for (size_t turn = 0; turn < simulation.m_turns_deadline; ++turn) {
         std::cout << "Simulating turn: " << turn << std::endl;
         simulation.m_current_turn = turn;
@@ -304,26 +316,60 @@ int main(int argc, char** argv) {
             if (drone_id == INVALID)
                 continue;
 
-            std::cout << "Found " << drone_id << " for product " << next_product_to_deliver << " at warehouse " << warehouse.id << std::endl;
+            order.mark_as_delivered(next_product_to_deliver);
 
             auto& drone = simulation.m_drones[drone_id];
-            size_t delta = drone.position.distance(warehouse.position) + 1;
-            out << LoadCommand(drone_id, warehouse.id, next_product_to_deliver, 1) << std::endl;
-            // TODO: something like
-            // while (more_available_products_for_order_in_warehouse) {
-            //   if (fits)
-            //   out << LoadCommand(...)
-            //   delta += 1;
-            // }
-
-            delta += warehouse.position.distance(order.destination) + 1;
 
             warehouse.take(next_product_to_deliver);
 
+            out << LoadCommand(drone_id, warehouse.id, next_product_to_deliver, 1) << std::endl;
+            size_t delta = drone.position.distance(warehouse.position) + 1;
+
+            delta += warehouse.position.distance(order.destination);
+
+            std::vector<ProductId> to_deliver;
+            to_deliver.push_back(next_product_to_deliver);
+
+
+            size_t weight = simulation.m_products[next_product_to_deliver].weight;
+            while (true) {
+                ProductId next = order.next_undelivered_product();
+                if (next == INVALID)
+                    break;
+
+                if (!warehouse.has(next))
+                    break;
+
+                weight += simulation.m_products[next].weight;
+                if (weight > simulation.m_drone_max_load)
+                    break;
+
+                order.mark_as_delivered(next);
+                warehouse.take(next);
+                out << LoadCommand(drone_id, warehouse.id, next, 1) << std::endl;
+                delta += 1;
+                to_deliver.push_back(next);
+            }
+
+            for (auto id: to_deliver) {
+                delta += 1;
+                out << DeliverCommand(drone_id, order.id, id, 1) << std::endl;
+            }
+
             drone.expected_unbusy_turn = turn + delta;
             drone.position = order.destination;
-            // Same here as before
-            out << DeliverCommand(drone_id, order.id, next_product_to_deliver, 1) << std::endl;
+        }
+
+        bool all_unbusy = true;
+        for (auto& drone: simulation.m_drones) {
+            if (!drone.unbusy(turn)) {
+                all_unbusy = false;
+                break;
+            }
+        }
+
+        if (all_unbusy) {
+            break; // ITS OVER!!
         }
 
         for (auto& drone: simulation.m_drones) {
