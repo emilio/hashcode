@@ -7,8 +7,6 @@
 using namespace std;
 
 class Commands{
-	public:
-	virtual string toString();	
 };
 
 class Load:Commands{
@@ -45,4 +43,8 @@ class Wait:Commands{
 	Wait(int droneId, int sleepTurns);
 };
 
+std::ostream& operator<<(std::ostream& out, const Load& load);
+std::ostream& operator<<(std::ostream& out, const Unload& unload);
+std::ostream& operator<<(std::ostream& out, const Deliver& deliver);
+std::ostream& operator<<(std::ostream& out, const Wait& wait);
 #endif COMMANDS_H
