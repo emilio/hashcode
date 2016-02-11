@@ -99,9 +99,20 @@ class Drone {
 public:
     DroneId id;
     Point position;
+
     std::vector<ProductId> current_products;
+    std::vector<Command> commands;
 
     explicit Drone(DroneId id, size_t x, size_t y): id(id), position(x, y) {}
+
+    bool unbusy(size_t current_turn) {
+        for (auto& command: commands) {
+            if (command.completed_at() < current_turn) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 class Simulation {
@@ -122,6 +133,29 @@ public:
     explicit Simulation(std::ifstream& in);
 
     DroneId nearest_unbusy_drone(const Point& point) {
+        DroneId drone_id = INVALID;
+        size_t distance = INVALID;
+
+        for (auto& drone: m_drones) {
+            if (drone.unbusy(m_current_turn) && drone.position.distance(point) <= distance) {
+                drone_id = drone.id;
+            }
+        }
+
+        return drone_id;
+    }
+
+    WarehouseId nearest_warehouse_with_product(const Point& point, ProductId product) {
+        WarehouseId warehouse_id = INVALID;
+        size_t distance = INVALID;
+
+        for (auto& warehouse: m_warehouses) {
+            if (warehouse.has(product) && warehouse.position.distance(point) <= distance) {
+                warehouse_id = warehouse.id;
+            }
+        }
+
+        return warehouse_id;
     }
 };
 
@@ -258,8 +292,9 @@ int main(int argc, char** argv) {
                 continue; // Next order
 
             WarehouseId warehouse = simulation.nearest_warehouse_with_product(order.destination, next_product_to_deliver);
+            assert(warehouse != INVALID);
 
-            DroneId drone_id = simulation.nearest_unbusy_drone(order.destination);
+            DroneId drone_id = simulation.nearest_unbusy_drone(warehouse.position);
         }
 
         while (!simulation.m_orders.empty()) {
