@@ -63,7 +63,7 @@ public:
         take(id, 1);
     }
 
-    explicit Warehouse(WarehouseId id, size_t x, size_t y): position(x, y) {}
+    explicit Warehouse(WarehouseId id, size_t x, size_t y): id(id), position(x, y) {}
 };
 
 class Product {
@@ -295,7 +295,7 @@ int main(int argc, char** argv) {
         simulation.m_current_turn = turn;
         for (auto& order: simulation.m_orders) {
             ProductId next_product_to_deliver = order.next_undelivered_product();
-            if (next_product_to_deliver != INVALID)
+            if (next_product_to_deliver == INVALID)
                 continue; // Next order
 
             auto& warehouse = simulation.nearest_warehouse_with_product(order.destination, next_product_to_deliver);
@@ -303,6 +303,8 @@ int main(int argc, char** argv) {
             DroneId drone_id = simulation.nearest_unbusy_drone(warehouse.position);
             if (drone_id == INVALID)
                 continue;
+
+            std::cout << "Found " << drone_id << " for product " << next_product_to_deliver << " at warehouse " << warehouse.id << std::endl;
 
             auto& drone = simulation.m_drones[drone_id];
             size_t delta = drone.position.distance(warehouse.position) + 1;
@@ -318,7 +320,7 @@ int main(int argc, char** argv) {
 
             warehouse.take(next_product_to_deliver);
 
-            drone.expected_unbusy_turn += delta;
+            drone.expected_unbusy_turn = turn + delta;
             drone.position = order.destination;
             // Same here as before
             out << DeliverCommand(drone_id, order.id, next_product_to_deliver, 1) << std::endl;
