@@ -418,5 +418,12 @@ fn main() {
 
     let pizza = Pizza::new(field);
     let slices = pizza.solve(min_per_slice, max_per_slice);
-    println!("{:?}", slices);
+
+    println!("{}", slices.len());
+    for slice in slices {
+        println!("{} {} {} {}",
+                 slice.x, slice.y,
+                 slice.x + slice.width,
+                 slice.y + slice.height);
+    }
 }
