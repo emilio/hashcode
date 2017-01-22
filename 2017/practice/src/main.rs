@@ -2,7 +2,7 @@
 
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum Ingredient {
@@ -51,10 +51,6 @@ impl Pizza {
         self.columns
     }
 
-    fn total_ingredients(&self) -> usize {
-        self.rows() * self.columns()
-    }
-
     fn each<F>(&self, mut f: F)
         where F: FnMut(Ingredient, usize, usize),
     {
@@ -71,21 +67,6 @@ impl Pizza {
 
     fn at(&self, x: usize, y: usize) -> Ingredient {
         self.field[y][x]
-    }
-
-    fn less_present_ingredient(&self) -> Ingredient {
-        let mut tomato_count = 0;
-        self.each(|ingredient, _, _| {
-            if ingredient == Ingredient::Tomato {
-                tomato_count += 1;
-            }
-        });
-
-        if self.total_ingredients() - tomato_count > tomato_count  {
-            Ingredient::Tomato
-        } else {
-            Ingredient::Mushroom
-        }
     }
 }
 
@@ -240,8 +221,6 @@ impl<'a> PizzaSolver<'a> {
         self.slices.push(slice);
     }
 
-    // FIXME(emilio): We probably want to make this O(1) since we check this _a
-    // lot_.
     fn occupied(&self, x: usize, y: usize) -> bool {
         self.occupied[y][x]
     }
@@ -358,11 +337,8 @@ impl<'a> PizzaSolver<'a> {
 
     fn find_minimal_slices(&mut self) {
         assert!(self.slices.is_empty());
-        let less_present_ingredient = self.pizza.less_present_ingredient();
-        self.pizza.each(|ingredient, x, y| {
-            if ingredient == less_present_ingredient {
-                self.try_create_slice_at(x, y);
-            }
+        self.pizza.each(|_ingredient, x, y| {
+            self.try_create_slice_at(x, y);
         });
     }
 
@@ -396,7 +372,7 @@ impl<'a> PizzaSolver<'a> {
 fn main() {
     let filename = env::args().skip(1).next().expect("Expected a filename");
 
-    let f = BufReader::new(File::open(filename).expect("Couldn't open file"));
+    let f = BufReader::new(File::open(&filename).expect("Couldn't open file"));
 
     let mut lines = f.lines();
     let (rows, columns, min_per_slice, max_per_slice) = {
@@ -429,6 +405,7 @@ fn main() {
     let pizza = Pizza::new(field);
     let slices = pizza.solve(min_per_slice, max_per_slice);
 
+    let mut score = 0;
     println!("{}", slices.len());
     for slice in slices {
         println!("{} {} {} {}",
@@ -436,5 +413,8 @@ fn main() {
                  slice.x,
                  slice.y + slice.height - 1,
                  slice.x + slice.width - 1);
+        score += slice.width * slice.height;
     }
+
+    let _ = writeln!(&mut ::std::io::stderr(), "[{}]: \t{:?}", filename, score);
 }
