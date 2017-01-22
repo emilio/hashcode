@@ -85,6 +85,9 @@ struct PizzaSolver<'a> {
 //
 // *shrug*
 fn try_expand_slice_towards(max_cells_per_slice: usize,
+                            min_of_each_per_slice: usize,
+                            update_occupied: bool,
+                            care_about_perfect_validity: bool,
                             pizza: &Pizza,
                             occupied: &mut Vec<Vec<bool>>,
                             slice: &mut Slice,
@@ -153,7 +156,7 @@ fn try_expand_slice_towards(max_cells_per_slice: usize,
         new_slice.y -= -direction_y as usize;
         new_slice.height += -direction_y as usize;
         for y in new_slice.y..slice.y {
-            for x in slice.x..slice.x + slice.width {
+            for x in new_slice.x..new_slice.x + new_slice.width {
                 if occupied[y][x] {
                     return false;
                 }
@@ -163,7 +166,7 @@ fn try_expand_slice_towards(max_cells_per_slice: usize,
     } else {
         new_slice.height += direction_y as usize;
         for y in slice.y + slice.height..slice.y + slice.height + direction_y as usize {
-            for x in slice.x..slice.x + slice.width {
+            for x in new_slice.x..new_slice.x + new_slice.width {
                 if occupied[y][x] {
                     return false;
                 }
@@ -172,8 +175,25 @@ fn try_expand_slice_towards(max_cells_per_slice: usize,
         }
     }
 
-    for (x, y) in points_to_occupy {
-        occupied[y][x] = true;
+    // assert_eq!(points_to_occupy.len(),
+    //            ((direction_x.abs() + 1) * (direction_y.abs() + 1) - 1) as usize);
+    for &(x, y) in &points_to_occupy {
+        match pizza.at(x, y) {
+            Ingredient::Tomato => new_slice.tomato_count += 1,
+            Ingredient::Mushroom => new_slice.mushroom_count += 1,
+        }
+    }
+
+    if care_about_perfect_validity &&
+        new_slice.tomato_count < min_of_each_per_slice &&
+        new_slice.mushroom_count < min_of_each_per_slice {
+        return false;
+    }
+
+    if update_occupied {
+        for (x, y) in points_to_occupy {
+            occupied[y][x] = true;
+        }
     }
 
     *slice = new_slice;
@@ -211,6 +231,7 @@ impl<'a> PizzaSolver<'a> {
     }
 
     fn add_slice(&mut self, slice: Slice) {
+        assert_eq!(slice.width * slice.height, slice.tomato_count + slice.mushroom_count);
         for x in slice.x..slice.x + slice.width {
             for y in slice.y..slice.y + slice.height {
                 assert!(!self.occupied[y][x]);
@@ -249,40 +270,36 @@ impl<'a> PizzaSolver<'a> {
             slice.width * slice.height < solver.max_cells_per_slice
         }
 
+        macro_rules! try_expand {
+            ($slice:expr, $x:expr, $y:expr) => {
+                try_expand_slice_towards(self.max_cells_per_slice,
+                                         self.min_of_each_per_slice,
+                                         false,
+                                         false,
+                                         &self.pizza,
+                                         &mut self.occupied,
+                                         $slice,
+                                         $x,
+                                         $y)
+            }
+        }
+        const SIZES: [(isize, isize); 6] = [
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 0),
+            (-1, -1),
+            (1, 1),
+        ];
+
         let mut slice = base_slice.clone();
-
-        // Try to grow to the top.
-        while !slice_valid(self, &slice) &&
-            slice_could_grow(self, &slice) &&
-            slice.y > 0 &&
-            !self.occupied(slice.x, slice.y - 1) {
-            slice.y -= 1;
-            slice.height += 1;
-            match self.pizza.at(slice.x, slice.y) {
-                Ingredient::Tomato => slice.tomato_count += 1,
-                Ingredient::Mushroom => slice.mushroom_count += 1,
+        'outer: while !slice_valid(self, &slice) {
+            for &(x, y) in &SIZES {
+                if try_expand!(&mut slice, x, y) {
+                    continue 'outer;
+                }
             }
-        }
-
-        // TODO: We could keep going and compare all the valid slices?
-        if slice_valid(self, &slice) {
-            self.add_slice(slice);
-            return;
-        }
-
-        slice = base_slice.clone();
-
-        // Try to grow to the left.
-        while !slice_valid(self, &slice) &&
-            slice_could_grow(self, &slice) &&
-            slice.x > 0 &&
-            !self.occupied(slice.x - 1, slice.y) {
-            slice.x -= 1;
-            slice.width += 1;
-            match self.pizza.at(slice.x, slice.y) {
-                Ingredient::Tomato => slice.tomato_count += 1,
-                Ingredient::Mushroom => slice.mushroom_count += 1,
-            }
+            break;
         }
 
         if slice_valid(self, &slice) {
@@ -290,49 +307,17 @@ impl<'a> PizzaSolver<'a> {
             return;
         }
 
-        // FIXME: Still smelling.
-        slice = base_slice.clone();
+        for &(x, y) in &SIZES {
+            let mut slice = base_slice.clone();
+            while !slice_valid(self, &slice) && try_expand!(&mut slice, x, y) {
+                // Keep trying.
+            }
 
-        // Try to grow to the right.
-        while !slice_valid(self, &slice) &&
-            slice_could_grow(self, &slice) &&
-            slice.x + slice.width < self.pizza.columns() &&
-            !self.occupied(slice.x + slice.width, slice.y) {
-            slice.width += 1;
-            match self.pizza.at(slice.x + slice.width - 1, slice.y) {
-                Ingredient::Tomato => slice.tomato_count += 1,
-                Ingredient::Mushroom => slice.mushroom_count += 1,
+            if slice_valid(self, &slice) {
+                self.add_slice(slice);
+                return;
             }
         }
-
-        if slice_valid(self, &slice) {
-            self.add_slice(slice);
-            return;
-        }
-
-        slice = base_slice.clone();
-
-        // Try to grow to the bottom.
-        while !slice_valid(self, &slice) &&
-            slice_could_grow(self, &slice) &&
-            slice.y + slice.height < self.pizza.rows() &&
-            !self.occupied(slice.x, slice.y + slice.height) {
-            slice.height += 1;
-            match self.pizza.at(slice.x, slice.y + slice.height - 1) {
-                Ingredient::Tomato => slice.tomato_count += 1,
-                Ingredient::Mushroom => slice.mushroom_count += 1,
-            }
-        }
-
-        if slice_valid(self, &slice) {
-            self.add_slice(slice);
-            return;
-        }
-
-        // TODO: We could try to find squares and such here, though it slightly
-        // complicates the logic there.
-        //
-        // Nothing super-important though.
     }
 
     fn find_minimal_slices(&mut self) {
@@ -346,6 +331,9 @@ impl<'a> PizzaSolver<'a> {
         macro_rules! try_expand {
             ($slice:expr, $x:expr, $y:expr) => {
                 try_expand_slice_towards(self.max_cells_per_slice,
+                                         self.min_of_each_per_slice,
+                                         true,
+                                         true,
                                          &self.pizza,
                                          &mut self.occupied,
                                          $slice,
