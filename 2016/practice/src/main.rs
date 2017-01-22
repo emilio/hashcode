@@ -114,6 +114,11 @@ fn try_expand_slice_towards(max_cells_per_slice: usize,
         return false; // already full.
     }
 
+    if (slice.width + direction_x.abs() as usize) *
+       (slice.height + direction_y.abs() as usize) > max_cells_per_slice {
+        return false; // would overflow
+   }
+
     // Check bounds.
     if direction_x < 0 {
         if slice.x < -direction_x as usize {
