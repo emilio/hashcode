@@ -97,6 +97,101 @@ struct PizzaSolver<'a> {
     slices: Vec<Slice>,
 }
 
+// FIXME(emilio): This is slightly unidiomatic to avoid double borrow errors.
+//
+// *shrug*
+fn try_expand_slice_towards(max_cells_per_slice: usize,
+                            pizza: &Pizza,
+                            occupied: &mut Vec<Vec<bool>>,
+                            slice: &mut Slice,
+                            direction_x: isize,
+                            direction_y: isize)
+                            -> bool {
+    if slice.width * slice.height >= max_cells_per_slice {
+        return false; // already full.
+    }
+
+    // Check bounds.
+    if direction_x < 0 {
+        if slice.x < -direction_x as usize {
+            return false;
+        }
+    } else {
+        if slice.x + slice.width + direction_x as usize > pizza.columns() {
+            return false;
+        }
+    }
+
+    if direction_y < 0 {
+        if slice.y < -direction_y as usize {
+            return false;
+        }
+    } else {
+        if slice.y + slice.height + direction_y as usize > pizza.rows() {
+            return false;
+        }
+    }
+
+    // Expand in the x axis.
+    let mut new_slice = slice.clone();
+    if direction_x < 0 {
+        new_slice.x -= -direction_x as usize;
+        for x in new_slice.x..slice.x {
+            for y in slice.y..slice.y + slice.height {
+                if occupied[y][x] {
+                    return false;
+                }
+            }
+        }
+        for x in new_slice.x..slice.x {
+            for y in slice.y..slice.y + slice.height {
+                occupied[y][x] = true;
+            }
+        }
+    } else {
+        new_slice.width += direction_x as usize;
+        for x in slice.x + slice.width..slice.x + slice.width + direction_x as usize {
+            for y in slice.y..slice.y + slice.height {
+                if occupied[y][x] {
+                    return false;
+                }
+            }
+        }
+        for x in slice.x + slice.width..slice.x + slice.width + direction_x as usize {
+            for y in slice.y..slice.y + slice.height {
+                occupied[y][x] = true;
+            }
+        }
+    }
+
+    // Expand in the y axis.
+    if direction_y < 0 {
+        new_slice.y -= -direction_y as usize;
+        for y in new_slice.y..slice.y {
+            for x in slice.x..slice.x + slice.width {
+                if occupied[y][x] {
+                    return false;
+                }
+                occupied[y][x] = true;
+            }
+        }
+    } else {
+        new_slice.height += direction_y as usize;
+        for y in slice.y + slice.height..slice.y + slice.height + direction_y as usize {
+            for x in slice.x..slice.x + slice.width {
+                if occupied[y][x] {
+                    return false;
+                }
+                occupied[y][x] = true;
+            }
+        }
+    }
+
+    *slice = new_slice;
+    true
+}
+
+
 impl<'a> PizzaSolver<'a> {
     fn new(pizza: &'a Pizza,
            min_of_each_per_slice: usize,
@@ -121,8 +216,8 @@ impl<'a> PizzaSolver<'a> {
     fn add_slice(&mut self, slice: Slice) {
         for x in slice.x..slice.x + slice.width {
             for y in slice.y..slice.y + slice.height {
-                assert!(!self.occupied[x][y]);
-                self.occupied[x][y] = true;
+                assert!(!self.occupied[y][x]);
+                self.occupied[y][x] = true;
             }
         }
 
@@ -132,7 +227,7 @@ impl<'a> PizzaSolver<'a> {
     // FIXME(emilio): We probably want to make this O(1) since we check this _a
     // lot_.
     fn occupied(&self, x: usize, y: usize) -> bool {
-        self.occupied[x][y]
+        self.occupied[y][x]
     }
 
     fn try_create_slice_at(&mut self, x: usize, y: usize) {
@@ -162,7 +257,7 @@ impl<'a> PizzaSolver<'a> {
         }
 
         fn slice_could_grow(solver: &PizzaSolver, slice: &Slice) -> bool {
-            slice.width * slice.height <= solver.max_cells_per_slice
+            slice.width * slice.height < solver.max_cells_per_slice
         }
 
         let mut slice = base_slice.clone();
@@ -262,12 +357,29 @@ impl<'a> PizzaSolver<'a> {
     }
 
     fn expand_slices(&mut self) {
-        // TODO
-        // for slice in &mut slices {
-        //     // Same logic, try to expand left then top, since that's how we
-        //     // insert the minimal slices.
-        //
-        // }
+        macro_rules! try_expand {
+            ($slice:expr, $x:expr, $y:expr) => {
+                try_expand_slice_towards(self.max_cells_per_slice,
+                                         &self.pizza,
+                                         &mut self.occupied,
+                                         $slice,
+                                         $x,
+                                         $y)
+            }
+        }
+
+        for slice in &mut self.slices {
+            // Same logic, try to expand left then top, since that's how we
+            // insert the minimal slices.
+            while try_expand!(slice, -1, -1) ||
+                  try_expand!(slice, 0, -1) ||
+                  try_expand!(slice, -1, 0) ||
+                  try_expand!(slice, 1, 1) ||
+                  try_expand!(slice, 0, 1) ||
+                  try_expand!(slice, 1, 0) {
+                // Just try again until we can't.
+            }
+        }
     }
 }
 
