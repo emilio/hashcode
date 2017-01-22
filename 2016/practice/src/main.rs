@@ -423,7 +423,7 @@ fn main() {
     for slice in slices {
         println!("{} {} {} {}",
                  slice.x, slice.y,
-                 slice.x + slice.width,
-                 slice.y + slice.height);
+                 slice.x + slice.width - 1,
+                 slice.y + slice.height - 1);
     }
 }
